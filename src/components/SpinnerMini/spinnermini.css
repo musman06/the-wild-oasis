@@ -1,0 +1,21 @@
+@keyframes rotate {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.spinner-mini {
+  width: 2.4rem;
+  height: 2.4rem;
+
+  animation: rotate 1.5s infinite linear;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner-mini svg {
+  width: 100%;
+  height: 100%;
+}

@@ -1,0 +1,15 @@
+.login-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1.2rem 0;
+
+  & label {
+    font-weight: 600;
+  }
+
+  & input {
+    color: black;
+    padding: 0.5rem;
+  }
+}
