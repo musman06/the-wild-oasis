@@ -5,7 +5,7 @@ function NewUsers() {
   return (
     <>
       <Heading Variant="h1" text="Create a new user" />
-      <SignupForm />
+      <SignUpForm />
     </>
   );
 }
