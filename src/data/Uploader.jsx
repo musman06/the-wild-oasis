@@ -1,67 +1,59 @@
-import { useState } from "react";
+import { useEffect } from "react";
 import { isFuture, isPast, isToday } from "date-fns";
 import { subtractDates } from "../utils/helpers";
-
-import Button from "@/components/Button/Button";
-
 import supabase from "../services/supabase";
 import { bookings } from "./data-bookings";
 import { cabins } from "./data-cabins";
 import { guests } from "./data-guests";
 
-// const originalSettings = {
-//   minBookingLength: 3,
-//   maxBookingLength: 30,
-//   maxGuestsPerBooking: 10,
-//   breakfastPrice: 15,
-// };
+const REFRESH_INTERVAL_DAYS = 5;
+const id = 1; // adjust if your settings table uses a different PK
 
 async function deleteGuests() {
   const { error } = await supabase.from("guests").delete().gt("id", 0);
-  if (error) console.log(error.message);
+  if (error) console.error("deleteGuests:", error.message);
 }
 
 async function deleteCabins() {
   const { error } = await supabase.from("cabins").delete().gt("id", 0);
-  if (error) console.log(error.message);
+  if (error) console.error("deleteCabins:", error.message);
 }
 
 async function deleteBookings() {
   const { error } = await supabase.from("bookings").delete().gt("id", 0);
-  if (error) console.log(error.message);
+  if (error) console.error("deleteBookings:", error.message);
 }
 
 async function createGuests() {
   const { error } = await supabase.from("guests").insert(guests);
-  if (error) console.log(error.message);
+  if (error) console.error("createGuests:", error.message);
 }
 
 async function createCabins() {
   const { error } = await supabase.from("cabins").insert(cabins);
-  if (error) console.log(error.message);
+  if (error) console.error("createCabins:", error.message);
 }
 
 async function createBookings() {
-  // Bookings need a guestId and a cabinId. We can't tell Supabase IDs for each object, it will calculate them on its own. So it might be different for different people, especially after multiple uploads. Therefore, we need to first get all guestIds and cabinIds, and then replace the original IDs in the booking data with the actual ones from the DB
   const { data: guestsIds } = await supabase
     .from("guests")
     .select("id")
     .order("id");
-  const allGuestIds = guestsIds.map((cabin) => cabin.id);
+  const allGuestIds = guestsIds.map((g) => g.id);
+
   const { data: cabinsIds } = await supabase
     .from("cabins")
     .select("id")
     .order("id");
-  const allCabinIds = cabinsIds.map((cabin) => cabin.id);
+  const allCabinIds = cabinsIds.map((c) => c.id);
 
   const finalBookings = bookings.map((booking) => {
-    // Here relying on the order of cabins, as they don't have and ID yet
     const cabin = cabins.at(booking.cabinID - 1);
     const number_nights = subtractDates(booking.end_date, booking.start_date);
     const cabin_price = number_nights * (cabin.regular_price - cabin.discount);
     const extras_price = booking.has_breakfast
       ? number_nights * 15 * booking.number_guests
-      : 0; // hardcoded breakfast price
+      : 0;
     const total_price = cabin_price + extras_price;
 
     let status;
@@ -95,67 +87,72 @@ async function createBookings() {
     };
   });
 
-  console.log(finalBookings);
-
   const { error } = await supabase.from("bookings").insert(finalBookings);
-  if (error) console.log(error.message);
+  if (error) console.error("createBookings:", error.message);
+}
+
+async function uploadAll() {
+  await deleteBookings();
+  await deleteGuests();
+  await deleteCabins();
+  await createGuests();
+  await createCabins();
+  await createBookings();
+}
+
+async function getLastUploadDate() {
+  const { data, error } = await supabase
+    .from("settings")
+    .select("last_data_upload")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.error("getLastUploadDate:", error.message);
+    return null;
+  }
+  return data?.last_data_upload ? new Date(data.last_data_upload) : null;
+}
+
+async function saveLastUploadDate() {
+  const { error } = await supabase
+    .from("settings")
+    .update({ last_data_upload: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) console.error("saveLastUploadDate:", error.message);
+}
+
+function daysSince(date) {
+  const ms = Date.now() - date.getTime();
+  return ms / (1000 * 60 * 60 * 24);
 }
 
 function Uploader() {
-  const [isLoading, setIsLoading] = useState(false);
+  useEffect(() => {
+    async function autoRefresh() {
+      const lastUpload = await getLastUploadDate();
+      const shouldUpload =
+        !lastUpload || daysSince(lastUpload) >= REFRESH_INTERVAL_DAYS;
 
-  async function uploadAll() {
-    setIsLoading(true);
-    // Bookings need to be deleted FIRST
-    await deleteBookings();
-    await deleteGuests();
-    await deleteCabins();
+      if (!shouldUpload) {
+        const daysAgo = lastUpload ? daysSince(lastUpload).toFixed(1) : "never";
+        console.log(
+          `[Uploader] Data is fresh. Last upload: ${daysAgo} days ago.`,
+        );
+        return;
+      }
 
-    // Bookings need to be created LAST
-    await createGuests();
-    await createCabins();
-    await createBookings();
+      console.log("[Uploader] Refreshing sample data...");
+      await uploadAll();
+      await saveLastUploadDate();
+      console.log("[Uploader] Sample data refreshed successfully.");
+    }
 
-    setIsLoading(false);
-  }
+    autoRefresh();
+  }, []);
 
-  async function uploadBookings() {
-    setIsLoading(true);
-    await deleteBookings();
-    await createBookings();
-    setIsLoading(false);
-  }
-
-  return (
-    <div
-      style={{
-        marginTop: "auto",
-        backgroundColor: "#e0e7ff",
-        padding: "8px",
-        borderRadius: "5px",
-        textAlign: "center",
-        display: "flex",
-        flexDirection: "column",
-        gap: "8px",
-      }}
-    >
-      <h3>SAMPLE DATA</h3>
-
-      <Button
-        onClick={uploadAll}
-        disabled={isLoading}
-        text="Upload ALL"
-        variation="primary"
-      />
-
-      <Button
-        onClick={uploadBookings}
-        disabled={isLoading}
-        text="Upload bookings ONLY"
-        variation="primary"
-      />
-    </div>
-  );
+  return null; // no UI rendered
 }
 
 export default Uploader;

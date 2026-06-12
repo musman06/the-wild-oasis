@@ -9,7 +9,7 @@ const Sidebar = () => {
       <Logo />
       <MainNav />
 
-      {/* <Uploader /> */}
+      <Uploader />
     </aside>
   );
 };
